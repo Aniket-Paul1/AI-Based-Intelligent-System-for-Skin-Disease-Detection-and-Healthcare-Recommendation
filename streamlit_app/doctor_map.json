@@ -1,0 +1,8 @@
+{
+  "Acne": {"doctor": "Dermatologist", "urgency": "Normal"},
+  "Vitiligo": {"doctor": "Dermatologist", "urgency": "Normal"},
+  "Dermatitis_Eczema": {"doctor": "Dermatologist", "urgency": "Normal"},
+  "Herpes": {"doctor": "Dermatologist / Infectious disease", "urgency": "Urgent"},
+  "Psoriasis": {"doctor": "Dermatologist", "urgency": "Normal"},
+  "Fungal_Infection": {"doctor": "Dermatologist", "urgency": "Normal"}
+}

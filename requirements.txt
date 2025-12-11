@@ -16,3 +16,14 @@ pandas>=1.5
 joblib>=1.2
 matplotlib>=3.5
 tqdm>=4.65
+streamlit
+sqlalchemy
+psycopg2-binary
+python-dotenv
+passlib[bcrypt]
+joblib
+pillow
+numpy
+tensorflow   # or torch depending on your model; include only what you need
+scikit-learn
+xgboost
