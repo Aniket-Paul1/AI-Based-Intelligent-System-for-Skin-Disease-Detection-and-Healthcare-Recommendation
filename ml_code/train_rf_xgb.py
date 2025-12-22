@@ -1,85 +1,105 @@
 # ml_code/train_rf_xgb.py
+
 import joblib
+import json
+import numpy as np
 from pathlib import Path
+
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, accuracy_score
-import xgboost as xgb
-from ml_code.config import EMBEDDINGS_DIR, MODELS_DIR
+from xgboost import XGBClassifier
 
-# Ensure models dir exists
-MODELS_DIR.mkdir(parents=True, exist_ok=True)
+from ml_code.config import (
+    TRAIN_EMB,
+    VAL_EMB,
+    MODELS_DIR,
+    CLASSES_JSON
+)
 
-def load_emb(split="train"):
-    """
-    Loads embeddings saved as joblib/pickle in EMBEDDINGS_DIR.
-    Expected filenames: train_embeddings.pkl and val_embeddings.pkl
-    The stored object is expected to be a dict with keys:
-      - 'feats' : numpy array shape (N, D)
-      - 'labels': array-like numeric labels
-      - 'paths' : list of image paths (optional)
-      - 'classes': list of class names (optional)
-    """
-    p = EMBEDDINGS_DIR / f"{split}_embeddings.pkl"
-    if not p.exists():
-        raise SystemExit(f"Embedding file missing: {p}")
-    d = joblib.load(p)
-    # Support both d being dict with keys or tuple/list
-    if isinstance(d, dict):
-        feats = d.get("feats") or d.get("X") or d.get("features")
-        labels = d.get("labels") or d.get("y")
-        paths = d.get("paths") or d.get("filenames") or d.get("files")
-        classes = d.get("classes") or d.get("class_names") or None
+# -------------------------------
+# Load embeddings
+# -------------------------------
+def load_embeddings(split: str):
+    if split == "train":
+        path = TRAIN_EMB
+    elif split == "val":
+        path = VAL_EMB
     else:
-        # if saved as tuple (X, y, paths, classes)
-        try:
-            feats, labels, paths, classes = d
-        except Exception as e:
-            raise RuntimeError("Unexpected embedding file format; expected dict or tuple (X,y,paths,classes)") from e
-    return feats, labels, paths, classes
+        raise ValueError("split must be 'train' or 'val'")
 
-def train_rf(X, y):
-    rf = RandomForestClassifier(n_estimators=200, random_state=42, n_jobs=-1)
-    rf.fit(X, y)
-    return rf
+    data = joblib.load(path)
 
-def train_xgb(X, y):
-    clf = xgb.XGBClassifier(
+    # Current format: (X, y)
+    if isinstance(data, tuple) and len(data) == 2:
+        X, y = data
+        return X, y
+
+    # Backward compatibility (old formats)
+    if isinstance(data, tuple) and len(data) >= 4:
+        X, y = data[0], data[1]
+        return X, y
+
+    raise RuntimeError("Unsupported embedding format")
+
+
+# -------------------------------
+# Main training logic
+# -------------------------------
+def main():
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Load embeddings
+    X_train, y_train = load_embeddings("train")
+    X_val, y_val = load_embeddings("val")
+
+    print("Train embeddings:", X_train.shape)
+    print("Val embeddings:", X_val.shape)
+
+    # Load class names
+    with open(CLASSES_JSON, "r") as f:
+        class_to_idx = json.load(f)
+
+    # Build index → class mapping
+    idx_to_class = {v: k for k, v in class_to_idx.items()}
+
+    # -------------------------------
+    # Random Forest
+    # -------------------------------
+    print("Training RandomForest...")
+    rf = RandomForestClassifier(
+        n_estimators=300,
+        max_depth=None,
+        n_jobs=-1,
+        random_state=42
+    )
+    rf.fit(X_train, y_train)
+
+    # -------------------------------
+    # XGBoost
+    # -------------------------------
+    print("Training XGBoost...")
+    xgb = XGBClassifier(
+        n_estimators=300,
+        max_depth=6,
+        learning_rate=0.05,
+        subsample=0.8,
+        colsample_bytree=0.8,
         objective="multi:softprob",
         eval_metric="mlogloss",
-        use_label_encoder=False,
-        n_estimators=200,
-        max_depth=6,
-        learning_rate=0.1,
-        verbosity=1
+        num_class=len(idx_to_class),
+        random_state=42
     )
-    clf.fit(X, y)
-    return clf
+    xgb.fit(X_train, y_train)
+
+    # -------------------------------
+    # Save models
+    # -------------------------------
+    joblib.dump(rf, MODELS_DIR / "randomforest.joblib")
+    joblib.dump(xgb, MODELS_DIR / "xgboost.joblib")
+    joblib.dump(idx_to_class, MODELS_DIR / "classes.joblib")
+
+    print("RF and XGBoost models saved.")
+    print("Classes:", idx_to_class)
+
 
 if __name__ == "__main__":
-    X_train, y_train, _, classes = load_emb("train")
-    X_val, y_val, val_paths, _ = load_emb("val")
-
-    print("Training RF...")
-    rf = train_rf(X_train, y_train)
-    print("Training XGB...")
-    xgb_clf = train_xgb(X_train, y_train)
-
-    for name, model in [("randomforest", rf), ("xgboost", xgb_clf)]:
-        preds = model.predict(X_val)
-        acc = accuracy_score(y_val, preds)
-        print(f"\n{name} validation accuracy: {acc:.4f}")
-        if classes is not None:
-            try:
-                print(classification_report(y_val, preds, target_names=classes))
-            except Exception:
-                print("classification_report could not use target_names; printing plain report")
-                print(classification_report(y_val, preds))
-        else:
-            print(classification_report(y_val, preds))
-        joblib.dump(model, MODELS_DIR / f"{name}.joblib")
-        print(f"Saved {MODELS_DIR / (name + '.joblib')}")
-
-    # save class mapping too (if present)
-    if classes is not None:
-        joblib.dump(classes, MODELS_DIR / "classes.joblib")
-        print("Saved class mapping.")
+    main()
