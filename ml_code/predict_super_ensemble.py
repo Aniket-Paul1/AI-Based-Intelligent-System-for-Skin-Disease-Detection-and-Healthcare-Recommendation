@@ -1,5 +1,3 @@
-# ml_code/predict_super_ensemble.py
-
 import json
 import numpy as np
 from pathlib import Path
@@ -61,7 +59,7 @@ def preprocess_for_cnn(img):
 
 
 # ======================================================
-# Load models (lazy)
+# Load models (lazy loading)
 # ======================================================
 def load_models():
     global keras_model, rf_model, xgb_model, embedding_model
@@ -82,13 +80,13 @@ def load_models():
         embedding_model = MobileNetV2(
             weights="imagenet",
             include_top=False,
-            pooling="avg",              # <-- CRITICAL (1280-D)
+            pooling="avg",              # 1280-D embedding
             input_shape=(IMG_SIZE[0], IMG_SIZE[1], 3),
         )
 
 
 # ======================================================
-# Compute 1280-D embedding (MATCHES TRAINING)
+# Compute 1280-D embedding
 # ======================================================
 def compute_embedding(img):
     if img.mode != "RGB":
@@ -120,7 +118,7 @@ def weighted_ensemble(preds, weights):
 
 
 # ======================================================
-# Main prediction function
+# Main prediction logic (CORE)
 # ======================================================
 def predict_from_pil(img):
     """
@@ -131,6 +129,7 @@ def predict_from_pil(img):
         "confidences": dict[label -> prob]
     }
     """
+
     load_classes()
     load_models()
 
@@ -160,7 +159,7 @@ def predict_from_pil(img):
         preds["xgb"] = xgb_probs
 
     # -----------------------------
-    # Weights (FINAL)
+    # Ensemble weights
     # -----------------------------
     weights = {
         "cnn": 0.70,
@@ -169,13 +168,13 @@ def predict_from_pil(img):
     }
 
     # -----------------------------
-    # Ensemble
+    # Weighted ensemble
     # -----------------------------
     ensemble = weighted_ensemble(preds, weights)
     ensemble = ensemble / ensemble.sum()
 
     # -----------------------------
-    # Output
+    # Output formatting
     # -----------------------------
     confidences = {
         LABELS_BY_INDEX[i]: float(ensemble[i])
@@ -194,7 +193,29 @@ def predict_from_pil(img):
 
 
 # ======================================================
-# CLI runner
+# Streamlit-compatible wrapper (IMPORTANT)
+# ======================================================
+def predict_image(img):
+    """
+    Wrapper for Streamlit UI.
+
+    Returns:
+        label (str)
+        confidence (float)        # 0–1
+        top_probabilities (dict)
+    """
+
+    result = predict_from_pil(img)
+
+    label = result["label"]
+    confidence = result["confidence"]
+    top_probabilities = result["confidences"]
+
+    return label, confidence, top_probabilities
+
+
+# ======================================================
+# CLI runner (UNCHANGED)
 # ======================================================
 if __name__ == "__main__":
     import argparse
@@ -210,5 +231,8 @@ if __name__ == "__main__":
     print("Label:", result["label"])
     print("Confidence:", result["confidence"])
     print("\nTop probabilities:")
-    for k, v in sorted(result["confidences"].items(), key=lambda x: -x[1])[:10]:
+    for k, v in sorted(
+        result["confidences"].items(),
+        key=lambda x: -x[1]
+    )[:10]:
         print(f"{k}: {v}")

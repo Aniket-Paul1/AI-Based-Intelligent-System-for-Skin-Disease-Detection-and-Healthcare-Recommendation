@@ -1,20 +1,26 @@
-# streamlit_app/db.py
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+import csv
 import os
-from dotenv import load_dotenv
+from datetime import datetime
 
-load_dotenv()
+DB_FILE = "prediction_history.csv"
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/skin_db")
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-Base = declarative_base()
+def save_prediction(disease, confidence):
+    """
+    Saves prediction history to CSV file.
+    """
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    file_exists = os.path.isfile(DB_FILE)
+
+    with open(DB_FILE, mode="a", newline="") as file:
+        writer = csv.writer(file)
+
+        # Write header only once
+        if not file_exists:
+            writer.writerow(["Timestamp", "Disease", "Confidence (%)"])
+
+        writer.writerow([
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            disease,
+            f"{confidence:.2f}"
+        ])
