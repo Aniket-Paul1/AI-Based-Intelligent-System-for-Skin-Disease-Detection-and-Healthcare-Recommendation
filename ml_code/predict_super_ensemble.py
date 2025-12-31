@@ -2,6 +2,8 @@ import json
 import numpy as np
 from pathlib import Path
 from PIL import Image
+import random
+import os
 
 import joblib
 import tensorflow as tf
@@ -9,10 +11,13 @@ import tensorflow as tf
 from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
+os.environ["PYTHONHASHSEED"] = "42"
+random.seed(42)
+np.random.seed(42)
+tf.random.set_seed(42)
+
 from ml_code.config import (
     CNN_MODEL,
-    RF_MODEL,
-    XGB_MODEL,
     CLASSES_JSON,
     IMG_SIZE,
 )
@@ -21,8 +26,6 @@ from ml_code.config import (
 # Global cached models
 # ======================================================
 keras_model = None
-rf_model = None
-xgb_model = None
 embedding_model = None
 LABELS_BY_INDEX = None
 
@@ -62,19 +65,11 @@ def preprocess_for_cnn(img):
 # Load models (lazy loading)
 # ======================================================
 def load_models():
-    global keras_model, rf_model, xgb_model, embedding_model
+    global keras_model, rf_model, embedding_model
 
     if keras_model is None:
         keras_model = tf.keras.models.load_model(str(CNN_MODEL))
         print("Loaded Keras model:", CNN_MODEL)
-
-    if rf_model is None and RF_MODEL.exists():
-        rf_model = joblib.load(RF_MODEL)
-        print("Loaded RF model:", RF_MODEL)
-
-    if xgb_model is None and XGB_MODEL.exists():
-        xgb_model = joblib.load(XGB_MODEL)
-        print("Loaded XGB model:", XGB_MODEL)
 
     if embedding_model is None:
         embedding_model = MobileNetV2(
@@ -144,27 +139,13 @@ def predict_from_pil(img):
     preds["cnn"] = cnn_probs
 
     # -----------------------------
-    # RF / XGB prediction
-    # -----------------------------
-    features = compute_embedding(img)
 
-    if rf_model is not None:
-        rf_probs = rf_model.predict_proba(features)[0]
-        rf_probs = rf_probs / rf_probs.sum()
-        preds["rf"] = rf_probs
-
-    if xgb_model is not None:
-        xgb_probs = xgb_model.predict_proba(features)[0]
-        xgb_probs = xgb_probs / xgb_probs.sum()
-        preds["xgb"] = xgb_probs
 
     # -----------------------------
     # Ensemble weights
     # -----------------------------
     weights = {
-        "cnn": 0.70,
-        "rf": 0.15,
-        "xgb": 0.15,
+        "cnn": 1.0
     }
 
     # -----------------------------

@@ -33,8 +33,6 @@ EMBEDDINGS_DIR = ARTIFACTS_DIR / "embeddings"
 
 # Models
 CNN_MODEL = MODELS_DIR / "cnn_model.h5"
-RF_MODEL = MODELS_DIR / "randomforest.joblib"
-XGB_MODEL = MODELS_DIR / "xgboost.joblib"
 CLIP_PTH = MODELS_DIR / "skinclip_finetuned.pth"
 
 # Class mappings
